@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<title>My first three.js app</title>
+	<style>
+		body {
+			margin: 0;
+		}
+	</style>
+</head>
+
+<body>
+	<script type="x-shader/x-frament" id="vs">
+		varying vec3 vNormal;
+		varying vec3 vPosition;
+		varying vec3 vLightPosition;
+		varying vec2 vUv;
+		varying vec3 vt;
+		varying vec3 vb;
+		varying mat3 vTBN;
+		varying vec3 vlightDirection;
+		uniform vec3 uLightPosition;
+
+		vec3 inverseTransformDirection( in vec3 dir, in mat4 matrix ) {
+			return normalize( ( vec4( dir, 0.0 ) * matrix ).xyz );
+		}
+
+		mat3 transposeMat3( const in mat3 m ) {
+            mat3 tmp;
+            tmp[ 0 ] = vec3( m[ 0 ].x, m[ 1 ].x, m[ 2 ].x );
+            tmp[ 1 ] = vec3( m[ 0 ].y, m[ 1 ].y, m[ 2 ].y );
+            tmp[ 2 ] = vec3( m[ 0 ].z, m[ 1 ].z, m[ 2 ].z );
+            return tmp;
+        }
+
+		void main(){
+			vNormal = vec3(normalMatrix * normal); 
+			vLightPosition = vec3(uLightPosition);
+			vUv = uv;
+			vec3 TranfromNormal = inverseTransformDirection( vNormal, viewMatrix );
+            vt = normalize(modelMatrix * vec4(tangent.xyz,0.0)).xyz;
+            vb = normalize(cross(TranfromNormal,vt));
+			vTBN = mat3(vt, vb, normalize(TranfromNormal));
+			vTBN = transposeMat3(vTBN);
+			vlightDirection = normalize( vTBN * vLightPosition);
+			vPosition = vec3(modelMatrix * vec4(position,1.0));
+			gl_Position = projectionMatrix * modelViewMatrix  * vec4(position,1.0);
+
+		}
+	</script>
+	<script type="x-shader/x-frament" id="fs">
+		varying vec3 vNormal;
+		//varying vec3 vLightPosition;
+		varying vec3 vPosition;
+		varying vec2 vUv;
+		varying vec3 vt;
+		varying vec3 vb;
+		varying mat3 vTBN;
+		varying vec3 vlightDirection;
+		uniform vec3 uAmbientColor;
+		uniform vec3 uBaseColor;
+		uniform sampler2D uNormalTex;
+
+		vec3 inverseTransformDirection( in vec3 dir, in mat4 matrix ) {
+			return normalize( ( vec4( dir, 0.0 ) * matrix ).xyz );
+		}
+
+		
+
+		void main(){
+			
+			//vec3 worldNormal = normalize( vTBN * texN );
+
+			vec3 texN = normalize(texture2D(uNormalTex, vUv).xyz * 2.0 - 1.0);;
+			float nDotL = max(0.0, dot(texN, vlightDirection));
+			//float distance = length(vPosition, vLightPosition);
+			vec3 viewDir = normalize( cameraPosition - vPosition );
+			//vec3 h = normalize( vlightDirection + viewDir);
+			vec3 h = normalize(reflect( -vlightDirection, texN));
+			vec3 spe = vec3(pow(max(0.0, dot(viewDir, h)), 100.0));
+			vec3 ambient = uAmbientColor *uBaseColor;
+			vec3 finalColor =uBaseColor * nDotL + ambient;
+			gl_FragColor = vec4(finalColor,1.0);
+		}
+	</script>
+
+	<script type="module">
+		import * as THREE from "../three.module.js";
+		import { OrbitControls } from '../OrbitControls.js';
+		// import { VertexNormalsHelper } from './jsm/helpers/VertexNormalsHelper.js';
+		let scene, camera, renderer, controls;
+
+		scene = new THREE.Scene();
+
+		var directionalLight = new THREE.DirectionalLight(0xffffff);
+		directionalLight.position.set(0, 25, 25)
+
+		camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 10000)
+		camera.position.z = 200;
+		camera.position.y = 200;
+
+		let lightPosition = {
+			value: directionalLight.position
+		},
+			AmbientColor = {
+				value: new THREE.Color(0.2, 0.2, 0.2)
+			},
+			BaseColor = {
+				value: new THREE.Color(1, 1, 1)
+			},
+			normal = {
+				value: new THREE.TextureLoader().load("./normal_mapping_normal_map.png")
+			}
+
+		const helper1 = new THREE.DirectionalLightHelper(directionalLight, 5, 0xFF0000);
+		scene.add(helper1);
+
+		// const geometry = new THREE.PlaneGeometry(25, 25,);
+		const geometry = new THREE.BoxGeometry(20, 20, 20);
+		//geometry.computeVertexNormals ()
+		geometry.computeTangents()
+		const material = new THREE.ShaderMaterial({
+			defines: {
+				USE_TANGENT: true,
+			},
+
+			uniforms: {
+				uAmbientColor: AmbientColor,
+				uLightPosition: lightPosition,
+				uBaseColor: BaseColor,
+				uNormalTex: normal,
+			},
+
+			vertexShader: document.getElementById("vs").textContent,
+			fragmentShader: document.getElementById("fs").textContent,
+			vertexColors: true
+		});
+		const sphere = new THREE.Mesh(geometry, material);
+		const sphere1 = new THREE.Mesh(geometry, material);
+		sphere1.position.x = 30
+		sphere.rotation.x = -3.14159 * 0.5
+		scene.add(sphere);
+		scene.add(sphere1);
+
+
+
+		// const helper = new VertexNormalsHelper(sphere, 2, 0x00ff00, 1);
+
+		// scene.add( helper );
+
+
+		renderer = new THREE.WebGLRenderer({ antialias: true });
+		renderer.setSize(window.innerWidth, window.innerHeight);
+		document.body.appendChild(renderer.domElement);
+
+		controls = new OrbitControls(camera, renderer.domElement);
+		controls.target.set(0, 0, 0);
+		controls.update();
+		const axesHelper = new THREE.AxesHelper(50);
+		scene.add(axesHelper);
+
+		function animate() {
+			// cube.rotation.x += 0.01;
+			// sphere.rotation.y += 0.01;
+			// console.log(cube.normalMatrix.elements)
+			// cameraPosition.value = camera.position;
+			// console.log( camera.position)
+			renderer.render(scene, camera);
+			requestAnimationFrame(animate);
+
+		}
+
+		animate()
+
+	</script>
+</body>
+
+</html>
