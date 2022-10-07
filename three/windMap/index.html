@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>windMap</title>
+    <style>
+        body {
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <script type="x-shader/x-frament" id="vs">
+        attribute float a_index;
+        uniform float u_particles_res;
+        uniform sampler2D uParticleState;
+        varying vec2 v_particle_pos;
+
+        vec3 uvToxyz(float u, float v, float r) {
+            float PI = 3.14159265;  
+            float wd = (u + 90.0) * PI / 90.0;
+            float jd = v * PI / 90.0;
+            float x = -r * cos(jd) * cos(wd);
+            float y = -r * sin(jd);
+            float z = r * cos(jd) * sin(wd);
+            return vec3(x,y,z);
+        }
+
+		void main(){
+            gl_PointSize = 1.0;
+            vec2 pos = texture2D(uParticleState, vec2(
+                fract(a_index / u_particles_res),
+                floor(a_index / u_particles_res) / u_particles_res)).rg;
+            vec3 pos1 = uvToxyz(pos.x, pos.y, 360.0 );
+			gl_Position = projectionMatrix * modelViewMatrix  * vec4(pos1, 1.0);
+
+		}
+	</script>
+    <script type="x-shader/x-frament" id="fs">
+		void main(){
+			gl_FragColor = vec4(1.0,0.0,0.0,1.0);
+		}
+	</script>
+
+    <script type="x-shader/x-frament" id="updateVs">
+        attribute vec2 a_pos;
+        varying vec2 v_tex_pos;
+
+        void main() {
+            v_tex_pos = a_pos;
+            gl_Position = vec4(1.0 - 2.0 * a_pos, 0, 1);
+        }
+	</script>
+
+
+    <script type="x-shader/x-frament" id="updateFs">
+        uniform sampler2D u_particles;
+        uniform sampler2D u_wind;
+        uniform vec2 u_wind_res;
+        varying vec2 v_tex_pos;
+
+        vec2 lookup_wind(const vec2 uv) {
+            return texture2D(u_wind, uv).rg;
+        }
+
+		void main(){
+            vec2 pos = texture2D(u_particles, v_tex_pos).rg;
+            pos = vec2(pos.x / 360.0, pos.y / 180);
+            vec2 velocity = lookup_wind(pos);
+        
+            // take EPSG:4236 distortion into account for calculating where the particle moved
+            float distortion = cos(radians(pos.y * 180.0 - 90.0));
+            vec2 offset = vec2(velocity.x / distortion, -velocity.y) * 0.0001 * 0.25;
+        
+            // update particle position, wrapping around the date line
+            pos = fract(1.0 + pos + offset);
+        
+            // encode the new particle position back into RGBA
+            gl_FragColor = vec4(pos, 0.0, 1.0);
+		}
+	</script>
+
+    <script type="module">
+        import * as THREE from "../three.module.js";
+        import { OrbitControls } from '../OrbitControls.js';
+
+        let scene, camera, renderer, controls;
+
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 100000)
+        camera.position.z = 200;
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 0, 0);
+        controls.update();
+        const axesHelper = new THREE.AxesHelper(360);
+        scene.add(axesHelper);
+
+        let particleNum = 50000;
+        let particleRes = Math.ceil(Math.sqrt(particleNum));
+        particleNum = particleRes * particleRes;
+
+        const particleState = new Float32Array(particleNum * 4);
+        const index = [];
+        const radius = 200
+        for (let i = 0; i < particleState.length; i += 2) {
+            index.push(i / 2);
+            // const angle1 = Math.random() * Math.PI * 2;
+            // const angle2 = Math.random() * Math.PI * 2;
+            // particleState[i] = radius * Math.sin(angle1) * Math.cos(angle2);
+            // particleState[i + 1] = radius * Math.sin(angle1) * Math.sin(angle2);
+            // particleState[i + 2] = radius * Math.cos(angle1);
+            // particleState[i + 3] = 1;
+            particleState[i] = Math.random() * 360;
+            particleState[i + 1] = Math.random() * 180;
+            particleState[i + 2] = 1;
+            particleState[i + 3] = 1;
+        }
+        let particleStateTexture0 = new THREE.DataTexture(new Float32Array(particleState), particleRes, particleRes, THREE.RGBAFormat, THREE.FloatType);
+        particleStateTexture0.needsUpdate = true;
+
+        const texture = new THREE.TextureLoader().load('./assets/wind/2016112000.png');
+
+        const material1 = new THREE.MeshBasicMaterial({ map: particleStateTexture0 });
+        const geometry1 = new THREE.PlaneGeometry(20, 20);
+        const plane = new THREE.Mesh(geometry1, material1);
+        scene.add(plane);
+
+        const material = new THREE.ShaderMaterial({
+            uniforms: {
+                uParticleState: { value: particleStateTexture0 },
+                u_particles_res: { value: particleRes },
+            },
+            vertexShader: document.getElementById("vs").textContent,
+            fragmentShader: document.getElementById("fs").textContent,
+        });
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('a_index', new THREE.Float32BufferAttribute(new Float32Array(index), 1));
+        let indexBuffer = new THREE.Uint32BufferAttribute(new Uint32Array(index), 1);
+        geometry.setIndex(indexBuffer);
+
+        let windMap = new THREE.Points(geometry, material)
+
+        scene.add(windMap)
+
+        let particleStateTexture1 = new THREE.WebGLRenderTarget(particleRes, particleRes);
+        const updateGeometry = new THREE.BufferGeometry();
+        updateGeometry.setAttribute('a_pos', new THREE.Float32BufferAttribute(new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]), 2));
+        const updateMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                uParticleState: { value: particleStateTexture0 },
+                u_particles_res: { value: particleRes },
+            },
+            vertexShader: document.getElementById("vs").textContent,
+            fragmentShader: document.getElementById("fs").textContent,
+        });
+
+        const mesh = new THREE.Mesh( updateGeometry, updateMaterial );
+
+        function animate() {
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+
+        animate()
+
+
+        function lngLatToXY(pt) {
+            var lon = pt[0];//经度 
+            var lat = pt[1];//纬度
+            let x = lon * 20037508.342789 / 180;
+            let y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180);
+            y = y * 20037508.342789 / 180;
+            return [x, y];
+        }
+
+
+        function webMercator2wgs84(x, y) {
+            let lon = x / 20037508.342789 * 180,
+                lat = y / 20037508.342789 * 180;
+            lat = 180 / Math.PI * (2 * Math.atan(Math.exp(lat * Math.PI / 180)) - Math.PI / 2);
+            return [lon, lat]
+        }
+
+        function transformToOrigin(center, xy) {
+            return {
+                x: xy[0] + center[0],
+                y: center[1] - xy[1]
+            }
+        }
+
+    </script>
+</body>
+
+</html>
