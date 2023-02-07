@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>windMap</title>
+    <style>
+        body {
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <script type="x-shader/x-vertex" id="vs">
+
+        attribute float a_index;
+        uniform float u_particles_res;
+        uniform sampler2D uParticleState;
+        varying vec2 v_particle_pos;
+
+        vec3 uvToxyz(float u, float v, float r) {
+            float PI = 3.14159265;  
+            float jd  = (u * 360.0) * PI / 180.0;
+            float wd =  (v * 180.0) * PI / 180.0;
+            float x = -r * sin(wd) * cos(jd);
+            float y = -r * cos(wd);
+            float z = r * sin(wd) * sin(jd);
+            return vec3(x,y,z);
+        }
+
+		void main(){
+            gl_PointSize = 1.0;
+            vec4 color = texture2D(uParticleState, vec2(
+                fract(a_index / u_particles_res),
+                floor(a_index / u_particles_res) / u_particles_res));
+            v_particle_pos = vec2(color.r, color.g);
+            vec3 pos = uvToxyz(v_particle_pos.x, v_particle_pos.y, 128.0 );
+			gl_Position = projectionMatrix * modelViewMatrix  * vec4(pos, 1.0);
+
+		}
+	</script>
+    <script type="x-shader/x-frament" id="fs">
+
+        uniform sampler2D uColorRampTexture;
+        uniform sampler2D u_wind;
+        varying vec2 v_particle_pos;
+
+		void main(){
+            vec2 velocity = mix(vec2(-19.38, -21.19),vec2(25.57, 22.77), texture2D(u_wind ,v_particle_pos).rg); 
+            float speed_t = length(velocity) / length(vec2(25.57, 22.77));
+            vec2 ramp_uv = vec2(fract(speed_t * 16.0), floor(speed_t * 16.0) / 16.0);
+			gl_FragColor = texture2D(uColorRampTexture, ramp_uv);
+		}
+	</script>
+
+    <script type="x-shader/x-vertex" id="updateVs">
+
+        attribute vec2 a_pos;
+        varying vec2 v_tex_pos;
+
+        void main() {
+            v_tex_pos = a_pos;
+            gl_Position = vec4(2.0 * a_pos - 1.0, 0, 1);
+        }
+	</script>
+
+
+    <script type="x-shader/x-frament" id="updateFs">
+
+        uniform sampler2D uParticleState;
+        uniform sampler2D u_wind;
+        uniform vec2 u_wind_res;
+        uniform float u_rand_seed;
+        uniform float u_speed;
+        varying vec2 v_tex_pos;
+
+        vec2 lookup_wind(const vec2 uv) {
+            vec2 px = 1.0 / vec2(360.0, 180.0);
+            vec2 vc = (floor(uv * vec2(360.0, 180.0))) * px;
+            return texture2D(u_wind, uv).rg;
+        }
+        
+        const vec3 rand_constants = vec3(12.9898, 78.233, 4375.85453);
+        float rand(const vec2 co) {
+            float t = dot(rand_constants.xy, co);
+            return fract(sin(t) * (rand_constants.z + t));
+        }
+        
+		void main(){
+            vec4 color = texture2D(uParticleState, v_tex_pos);
+            vec2 pos = color.rg; 
+
+            vec2 velocity = mix(vec2(-19.38, -21.19),vec2(25.57, 22.77), lookup_wind(pos));
+
+            //float speed_t = length(velocity) / length(vec2(25.57, 22.77));
+
+            float distortion = cos(radians(pos.y * 180.0 - 90.0));
+
+            vec2 offset = vec2(velocity.x / distortion , velocity.y) * 0.0001 * u_speed;
+        
+            pos = fract(1.0 + pos + offset );
+
+            vec2 seed = (pos + v_tex_pos) * u_rand_seed;
+            float drop = step(1.0 - 0.003, rand(seed));
+            vec2 random_pos = vec2( rand(seed + 1.3), rand(seed + 2.1));
+            pos = mix(pos, random_pos, drop);
+
+            gl_FragColor = vec4(pos, 1.0, 1.0);
+
+		}
+	</script>
+
+    <script type="module">
+		import * as THREE from "../build/three.module.js";
+		import { OrbitControls } from '../examples/jsm/controls/OrbitControls.js';
+
+        import { EffectComposer } from '../examples/jsm/postprocessing/EffectComposer.js';
+		import { RenderPass } from '../examples/jsm/postprocessing/RenderPass.js';
+		import { AfterimagePass } from '../examples/jsm/postprocessing/AfterimagePass.js';
+        import { SMAAPass } from '../examples/jsm/postprocessing/SMAAPass.js';
+        import {GUI} from '../examples/jsm/libs/lil-gui.module.min.js'
+
+        let scene, camera, renderer, controls, composer, afterimagePass;
+        let isChange = false;
+        let particleStateTexture1, particleStateTexture2, particleNum, particleRes, particleIndex;
+
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 100000)
+        camera.position.z = 500;
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableZoom = false
+        controls.target.set(0, 0, 0);
+        controls.update();
+        controls.addEventListener('change', ()=>{
+            isChange = true;
+        })
+
+        controls.addEventListener('end', ()=>{
+            isChange = false;
+            clearAfterOldTexture()
+        })
+
+        let windOption = {
+            particleNum: 300000,
+            speed: 0.1,
+            randomSeed: Math.random(),
+        }
+
+        let gui = new GUI();
+
+        gui.add( windOption, 'speed', 0.1, 2 ).onChange( function () {
+            option1.u_speed.value = windOption.speed
+        } );
+
+        gui.add( windOption, 'randomSeed', 0, 1 ).onChange( function () {
+            option1.u_rand_seed.value = windOption.randomSeed
+        } );
+        gui.add( windOption, 'particleNum', 1024, 500000 ).onChange( function () {
+            setParticleNum(windOption.particleNum)
+        } );
+
+
+        function setParticleNum(num){
+            particleNum  = num  ;
+            particleRes = Math.ceil(Math.sqrt(particleNum));
+            particleNum = particleRes * particleRes;
+            const particleState = new Float32Array( particleNum * 4);
+            particleIndex = [];
+            const radius = 200
+            for (let i = 0; i < particleState.length; i += 4) {
+                particleIndex.push(i / 4);
+                particleState[i] = Math.random();
+                particleState[i + 1] =  Math.random();
+                particleState[i + 2] = 0;
+                particleState[i + 3] = 1;
+            }
+
+            if(particleStateTexture1 && particleStateTexture2){
+                particleStateTexture1.texture.dispose()
+                particleStateTexture1.dispose()
+                particleStateTexture2.texture.dispose()
+                particleStateTexture2.dispose()
+            }
+            particleStateTexture1 = new THREE.WebGLRenderTarget(particleRes, particleRes);
+            particleStateTexture1.texture = new THREE.DataTexture(new Float32Array(particleState), particleRes, particleRes, THREE.RGBAFormat, THREE.FloatType);
+            particleStateTexture1.texture.needsUpdate = true;
+            particleStateTexture2 = new THREE.WebGLRenderTarget(particleRes, particleRes);
+            particleStateTexture2.texture = new THREE.DataTexture(new Float32Array(particleState), particleRes, particleRes, THREE.RGBAFormat, THREE.FloatType);
+            particleStateTexture2.texture.needsUpdate = true;
+        }
+
+        setParticleNum(windOption.particleNum)
+
+        let colorRampData = [
+     50,
+     137,
+     188,
+     255,
+     53,
+     139,
+     187,
+     255,
+     55,
+     141,
+     186,
+     255,
+     57,
+     144,
+     186,
+     255,
+     59,
+     146,
+     184,
+     255,
+     61,
+     148,
+     184,
+     255,
+     63,
+     150,
+     182,
+     255,
+     65,
+     153,
+     182,
+     255,
+     67,
+     155,
+     180,
+     255,
+     69,
+     157,
+     180,
+     255,
+     71,
+     159,
+     179,
+     255,
+     73,
+     162,
+     178,
+     255,
+     75,
+     164,
+     177,
+     255,
+     77,
+     166,
+     176,
+     255,
+     79,
+     168,
+     175,
+     255,
+     81,
+     171,
+     174,
+     255,
+     83,
+     173,
+     173,
+     255,
+     85,
+     175,
+     172,
+     255,
+     87,
+     177,
+     171,
+     255,
+     89,
+     180,
+     171,
+     255,
+     91,
+     182,
+     169,
+     255,
+     93,
+     184,
+     169,
+     255,
+     95,
+     187,
+     167,
+     255,
+     98,
+     189,
+     167,
+     255,
+     99,
+     191,
+     165,
+     255,
+     102,
+     193,
+     165,
+     255,
+     104,
+     194,
+     164,
+     255,
+     107,
+     196,
+     165,
+     255,
+     109,
+     197,
+     164,
+     255,
+     112,
+     198,
+     165,
+     255,
+     115,
+     199,
+     164,
+     255,
+     118,
+     200,
+     165,
+     255,
+     120,
+     201,
+     164,
+     255,
+     123,
+     202,
+     164,
+     255,
+     126,
+     203,
+     164,
+     255,
+     128,
+     204,
+     164,
+     255,
+     131,
+     205,
+     164,
+     255,
+     134,
+     206,
+     164,
+     255,
+     136,
+     207,
+     164,
+     255,
+     139,
+     208,
+     164,
+     255,
+     142,
+     209,
+     164,
+     255,
+     145,
+     210,
+     164,
+     255,
+     147,
+     211,
+     164,
+     255,
+     150,
+     213,
+     164,
+     255,
+     152,
+     213,
+     164,
+     255,
+     155,
+     215,
+     164,
+     255,
+     158,
+     216,
+     164,
+     255,
+     161,
+     217,
+     164,
+     255,
+     163,
+     218,
+     164,
+     255,
+     166,
+     219,
+     164,
+     255,
+     169,
+     220,
+     164,
+     255,
+     172,
+     221,
+     164,
+     255,
+     174,
+     222,
+     163,
+     255,
+     176,
+     223,
+     163,
+     255,
+     178,
+     224,
+     162,
+     255,
+     181,
+     225,
+     162,
+     255,
+     183,
+     225,
+     161,
+     255,
+     185,
+     227,
+     161,
+     255,
+     187,
+     227,
+     160,
+     255,
+     190,
+     229,
+     160,
+     255,
+     192,
+     229,
+     159,
+     255,
+     194,
+     230,
+     159,
+     255,
+     197,
+     231,
+     158,
+     255,
+     199,
+     232,
+     158,
+     255,
+     201,
+     233,
+     157,
+     255,
+     204,
+     234,
+     157,
+     255,
+     206,
+     235,
+     156,
+     255,
+     208,
+     236,
+     156,
+     255,
+     210,
+     237,
+     155,
+     255,
+     213,
+     238,
+     155,
+     255,
+     215,
+     239,
+     155,
+     255,
+     218,
+     240,
+     154,
+     255,
+     220,
+     240,
+     153,
+     255,
+     222,
+     242,
+     153,
+     255,
+     224,
+     242,
+     153,
+     255,
+     227,
+     244,
+     152,
+     255,
+     229,
+     244,
+     152,
+     255,
+     230,
+     244,
+     151,
+     255,
+     231,
+     243,
+     151,
+     255,
+     232,
+     243,
+     150,
+     255,
+     233,
+     241,
+     150,
+     255,
+     234,
+     241,
+     149,
+     255,
+     235,
+     240,
+     149,
+     255,
+     236,
+     239,
+     148,
+     255,
+     237,
+     238,
+     148,
+     255,
+     238,
+     238,
+     147,
+     255,
+     239,
+     237,
+     147,
+     255,
+     240,
+     236,
+     146,
+     255,
+     240,
+     235,
+     146,
+     255,
+     242,
+     234,
+     145,
+     255,
+     242,
+     233,
+     145,
+     255,
+     244,
+     233,
+     144,
+     255,
+     244,
+     232,
+     143,
+     255,
+     245,
+     231,
+     143,
+     255,
+     246,
+     230,
+     143,
+     255,
+     247,
+     229,
+     142,
+     255,
+     248,
+     228,
+     141,
+     255,
+     249,
+     228,
+     141,
+     255,
+     250,
+     227,
+     141,
+     255,
+     251,
+     226,
+     140,
+     255,
+     252,
+     225,
+     139,
+     255,
+     253,
+     224,
+     139,
+     255,
+     254,
+     223,
+     138,
+     255,
+     254,
+     222,
+     137,
+     255,
+     253,
+     219,
+     135,
+     255,
+     254,
+     218,
+     134,
+     255,
+     253,
+     216,
+     132,
+     255,
+     254,
+     214,
+     130,
+     255,
+     253,
+     212,
+     128,
+     255,
+     253,
+     210,
+     127,
+     255,
+     253,
+     208,
+     125,
+     255,
+     253,
+     206,
+     124,
+     255,
+     253,
+     204,
+     122,
+     255,
+     253,
+     202,
+     121,
+     255,
+     253,
+     200,
+     119,
+     255,
+     253,
+     198,
+     117,
+     255,
+     253,
+     196,
+     115,
+     255,
+     253,
+     194,
+     114,
+     255,
+     253,
+     192,
+     112,
+     255,
+     253,
+     190,
+     111,
+     255,
+     253,
+     188,
+     109,
+     255,
+     253,
+     186,
+     107,
+     255,
+     253,
+     184,
+     106,
+     255,
+     253,
+     183,
+     104,
+     255,
+     253,
+     180,
+     102,
+     255,
+     253,
+     179,
+     101,
+     255,
+     253,
+     176,
+     99,
+     255,
+     253,
+     175,
+     98,
+     255,
+     252,
+     172,
+     96,
+     255,
+     252,
+     170,
+     95,
+     255,
+     252,
+     167,
+     94,
+     255,
+     252,
+     165,
+     93,
+     255,
+     251,
+     162,
+     91,
+     255,
+     251,
+     160,
+     90,
+     255,
+     250,
+     157,
+     89,
+     255,
+     250,
+     155,
+     88,
+     255,
+     249,
+     152,
+     87,
+     255,
+     249,
+     150,
+     86,
+     255,
+     249,
+     147,
+     84,
+     255,
+     249,
+     145,
+     83,
+     255,
+     248,
+     142,
+     82,
+     255,
+     248,
+     139,
+     81,
+     255,
+     247,
+     137,
+     80,
+     255,
+     247,
+     134,
+     79,
+     255,
+     247,
+     132,
+     77,
+     255,
+     247,
+     129,
+     76,
+     255,
+     246,
+     127,
+     75,
+     255,
+     246,
+     124,
+     74,
+     255,
+     245,
+     121,
+     72,
+     255,
+     245,
+     119,
+     72,
+     255,
+     245,
+     116,
+     70,
+     255,
+     245,
+     114,
+     69,
+     255,
+     244,
+     111,
+     68,
+     255,
+     244,
+     109,
+     67,
+     255,
+     243,
+     108,
+     67,
+     255,
+     243,
+     108,
+     67,
+     255,
+     243,
+     107,
+     67,
+     255,
+     243,
+     107,
+     67,
+     255,
+     242,
+     106,
+     67,
+     255,
+     242,
+     106,
+     67,
+     255,
+     241,
+     105,
+     67,
+     255,
+     241,
+     105,
+     68,
+     255,
+     241,
+     104,
+     68,
+     255,
+     241,
+     104,
+     68,
+     255,
+     240,
+     103,
+     68,
+     255,
+     240,
+     103,
+     68,
+     255,
+     240,
+     103,
+     68,
+     255,
+     240,
+     102,
+     68,
+     255,
+     239,
+     102,
+     68,
+     255,
+     239,
+     101,
+     69,
+     255,
+     238,
+     101,
+     69,
+     255,
+     238,
+     101,
+     69,
+     255,
+     238,
+     100,
+     69,
+     255,
+     238,
+     100,
+     69,
+     255,
+     237,
+     99,
+     69,
+     255,
+     237,
+     99,
+     69,
+     255,
+     237,
+     98,
+     69,
+     255,
+     237,
+     98,
+     70,
+     255,
+     236,
+     97,
+     69,
+     255,
+     236,
+     97,
+     70,
+     255,
+     235,
+     96,
+     70,
+     255,
+     235,
+     96,
+     70,
+     255,
+     235,
+     95,
+     70,
+     255,
+     235,
+     95,
+     70,
+     255,
+     234,
+     94,
+     70,
+     255,
+     234,
+     94,
+     70,
+     255,
+     234,
+     93,
+     70,
+     255,
+     234,
+     93,
+     71,
+     255,
+     233,
+     92,
+     71,
+     255,
+     233,
+     92,
+     71,
+     255,
+     232,
+     92,
+     71,
+     255,
+     232,
+     91,
+     71,
+     255,
+     232,
+     91,
+     71,
+     255,
+     232,
+     90,
+     71,
+     255,
+     231,
+     90,
+     71,
+     255,
+     231,
+     90,
+     72,
+     255,
+     231,
+     89,
+     72,
+     255,
+     230,
+     89,
+     72,
+     255,
+     230,
+     88,
+     72,
+     255,
+     230,
+     88,
+     72,
+     255,
+     229,
+     87,
+     72,
+     255,
+     229,
+     87,
+     72,
+     255,
+     229,
+     86,
+     72,
+     255,
+     229,
+     86,
+     73,
+     255,
+     228,
+     85,
+     72,
+     255,
+     228,
+     85,
+     73,
+     255,
+     228,
+     84,
+     73,
+     255,
+     227,
+     84,
+     73,
+     255,
+     227,
+     83,
+     73,
+     255,
+     227,
+     83,
+     73,
+     255,
+     226,
+     82,
+     73,
+     255,
+     226,
+     82,
+     74,
+     255,
+     226,
+     81,
+     73,
+     255,
+     226,
+     81,
+     74,
+     255,
+     225,
+     81,
+     74,
+     255,
+     225,
+     80,
+     74,
+     255,
+     224,
+     80,
+     74,
+     255,
+     224,
+     79,
+     74,
+     255,
+     224,
+     79,
+     74,
+     255,
+     224,
+     79,
+     75,
+     255,
+     223,
+     78,
+     74,
+     255,
+     223,
+     78,
+     75,
+     255,
+     223,
+     77,
+     75,
+     255,
+     223,
+     77,
+     75,
+     255,
+     222,
+     76,
+     75,
+     255,
+     222,
+     76,
+     75,
+     255,
+     221,
+     75,
+     75,
+     255,
+     221,
+     75,
+     75,
+     255,
+     221,
+     74,
+     75,
+     255,
+     221,
+     74,
+     76,
+     255,
+     220,
+     73,
+     76,
+     255,
+     220,
+     73,
+     76,
+     255,
+     220,
+     72,
+     76,
+     255,
+     220,
+     72,
+     76,
+     255,
+     219,
+     71,
+     76,
+     255,
+     219,
+     71,
+     76,
+     255,
+     218,
+     70,
+     76,
+     255,
+     218,
+     70,
+     77,
+     255,
+     218,
+     70,
+     77,
+     255,
+     218,
+     69,
+     77,
+     255,
+     217,
+     69,
+     77,
+     255,
+     217,
+     68,
+     77,
+     255,
+     217,
+     68,
+     77,
+     255,
+     217,
+     68,
+     77,
+     255,
+     216,
+     67,
+     77,
+     255,
+     216,
+     67,
+     78,
+     255,
+     215,
+     66,
+     77,
+     255,
+     215,
+     66,
+     78,
+     255,
+     215,
+     65,
+     78,
+     255,
+     215,
+     65,
+     78,
+     255,
+     214,
+     64,
+     78,
+     255,
+     214,
+     64,
+     78,
+     255,
+     214,
+     63,
+     78,
+     255,
+     213,
+     63,
+     78,
+     255,
+     213,
+     62,
+     78,
+     255,
+     213,
+     62,
+     79,
+     255
+]
+        
+        let colorRampTexture = new THREE.DataTexture(new Uint8Array(colorRampData), 16, 16, THREE.RGBAFormat, THREE.UnsignedByteType)
+        colorRampTexture.needsUpdate = true;
+
+        const texture = new THREE.TextureLoader().load('./assets/wind/2016112006.png');
+        texture.generateMipmaps =false
+
+        const earthTexture = new THREE.TextureLoader().load('./earth.jpg');
+        const earthMateril = new THREE.MeshBasicMaterial({map: earthTexture});
+        const earthGeometry = new THREE.SphereGeometry( 127, 32, 32 );
+        const earthMesh = new THREE.Mesh( earthGeometry, earthMateril );
+        scene.add( earthMesh );
+
+        // const material2 = new THREE.MeshBasicMaterial({ map: texture });
+        // const geometry2 = new THREE.PlaneGeometry(256, 128);
+        // const plane2 = new THREE.Mesh(geometry2, material2);
+        // plane2.position.set(300, 64, -1);
+        // console.log(plane2)
+        // scene.add(plane2);
+
+        const light = new THREE.AmbientLight( 0x404040 ); // soft white light
+		scene.add( light );
+
+        //绘制
+        let option = {
+                uParticleState: { value: particleStateTexture2.texture },
+                u_particles_res: { value: particleRes },
+                uColorRampTexture: {value: colorRampTexture},
+                u_wind: { value: texture }
+            }
+        const material = new THREE.ShaderMaterial({
+            uniforms: option,
+            vertexShader: document.getElementById("vs").textContent,
+            fragmentShader: document.getElementById("fs").textContent,
+        });
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('a_index', new THREE.Float32BufferAttribute(new Float32Array(particleIndex), 1));
+        geometry.setIndex(particleIndex);
+
+        let windMap = new THREE.Points(geometry, material)
+        scene.add(windMap)
+
+        //更新
+        const updateGeometry = new THREE.BufferGeometry();
+        updateGeometry.setAttribute('a_pos', new THREE.Float32BufferAttribute(new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]), 2));
+        updateGeometry.setIndex([0,1,2,3,4,5])
+
+        let option1 = {
+                uParticleState: { value: particleStateTexture2.texture },
+                u_particles_res: { value: particleRes },
+                u_wind: { value: texture},
+                u_rand_seed: {value: Math.random()},
+                u_speed: {value: 0.1}
+            }
+
+        const updateMaterial = new THREE.ShaderMaterial({
+            uniforms: option1,
+            vertexShader: document.getElementById("updateVs").textContent,
+            fragmentShader: document.getElementById("updateFs").textContent,
+        });
+
+        const mesh = new THREE.Mesh( updateGeometry, updateMaterial );
+
+        composer = new EffectComposer( renderer );
+        composer.addPass( new RenderPass( scene, camera ) );
+
+        afterimagePass = new AfterimagePass();
+        afterimagePass.uniforms[ 'damp' ].value = 0.98
+        composer.addPass( afterimagePass );
+        
+        const pass = new SMAAPass( window.innerWidth * renderer.getPixelRatio(), window.innerHeight * renderer.getPixelRatio() );
+        composer.addPass( pass );
+
+
+        function animate() {
+            if(isChange){
+                windMap.visible = false;
+                renderer.render( scene, camera );
+            } else{
+                renderer.setRenderTarget( particleStateTexture1 );
+                renderer.render( mesh, camera );
+
+                let temp = particleStateTexture2;
+                particleStateTexture2 = particleStateTexture1;
+                particleStateTexture1 = temp;
+                option1.uParticleState.value = particleStateTexture2.texture;
+                option.uParticleState.value = particleStateTexture2.texture;
+                option1.u_rand_seed.value = Math.random();
+                renderer.setRenderTarget( null );
+                windMap.visible = true;
+                composer.render()
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        function clearAfterOldTexture(){
+            afterimagePass.textureOld.texture.dispose();
+            afterimagePass.textureOld.dispose();
+            afterimagePass.textureOld = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, {
+                minFilter: THREE.LinearFilter,
+                magFilter: THREE.NearestFilter,
+                format: THREE.RGBAFormat
+            } )
+        }
+
+        animate()
+
+    </script>
+</body>
+
+</html>
