@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>windMap</title>
+    <style>
+        body {
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js"></script>
+    <script type="module">
+		import * as THREE from "../build/three.module.js";
+		import { OrbitControls } from '../examples/jsm/controls/OrbitControls.js';
+        import {GUI} from '../examples/jsm/libs/lil-gui.module.min.js'
+
+        let scene, camera, renderer, controls;
+
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 100000)
+        camera.position.z = 500;
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableZoom = false
+        controls.target.set(0, 0, 0);
+        controls.update();
+
+        const light = new THREE.AmbientLight( 0x404040 ); // soft white light
+		scene.add( light );
+
+        function animate() {
+            renderer.render( scene, camera );
+            requestAnimationFrame(animate);
+        }
+        animate()
+    </script>
+</body>
+
+</html>
