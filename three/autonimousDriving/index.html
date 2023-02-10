@@ -35,6 +35,33 @@
         const light = new THREE.AmbientLight( 0x404040 ); // soft white light
 		scene.add( light );
 
+
+        axios.get('./106-frame.glb', {
+            responseType: 'arraybuffer', 
+        })
+        .then(function (response) {
+            console.log(response);
+            var dataView = new DataView(response.data);
+            let byteOffset = 0;
+            let a = {}
+            a.type = getMagicString(dataView, byteOffset + 0);
+            a.version = dataView.getUint32(byteOffset + 4, true);
+            var byteLength = dataView.getUint32(byteOffset + 8, true);
+            a.header = {
+                byteOffset: byteOffset,
+                byteLength: byteLength
+            };
+            console.log(a)
+        })
+        .catch(function (error) {
+            console.log(error);
+        });
+
+        function getMagicString(dataView) {
+            var byteOffset = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
+            return "".concat(String.fromCharCode(dataView.getUint8(byteOffset + 0))).concat(String.fromCharCode(dataView.getUint8(byteOffset + 1))).concat(String.fromCharCode(dataView.getUint8(byteOffset + 2))).concat(String.fromCharCode(dataView.getUint8(byteOffset + 3)));
+        }
+
         function animate() {
             renderer.render( scene, camera );
             requestAnimationFrame(animate);
