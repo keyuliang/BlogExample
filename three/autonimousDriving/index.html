@@ -19,6 +19,7 @@
         import {GUI} from '../examples/jsm/libs/lil-gui.module.min.js'
 
         let scene, camera, renderer, controls;
+        let body
 
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 100000)
@@ -36,7 +37,7 @@
 		scene.add( light );
 
 
-        axios.get('./106-frame.glb', {
+        axios.get('./2-frame.glb', {
             responseType: 'arraybuffer', 
         })
         .then(function (response) {
@@ -51,11 +52,85 @@
                 byteOffset: byteOffset,
                 byteLength: byteLength
             };
+            parseGlb(response.data, byteOffset + 12, byteLength)
+
             console.log(a)
         })
         .catch(function (error) {
             console.log(error);
         });
+
+        function parseGlb(data, bufferOffset, bufferLength){
+            let dataView = new DataView(data);
+         
+            let chunkoffset = bufferOffset;
+
+            while(chunkoffset < bufferLength ){
+                let chunkLength = dataView.getUint32(chunkoffset, true);
+                chunkoffset += 4
+                let chunkType = dataView.getUint32(chunkoffset, true);
+                chunkoffset += 4
+
+                if(chunkType == 0){
+                    let contentArray = new Uint8Array(data, chunkoffset, chunkLength);
+                    let content = decodeText(contentArray)
+                    let json = JSON.parse(content)
+                    console.log(json)
+                } else{
+                    body = data.slice(chunkoffset,  chunkoffset + chunkLength)
+                    console.log(body)
+                    
+                    let content = new Float32Array(body, 493588, 1480764 / 4);
+                    console.log(content)
+
+                }
+
+                chunkoffset += padTo4Bytes(chunkLength)    
+                console.log(chunkoffset)    
+            }
+           
+        }
+
+        function padTo4Bytes(byteLength) {
+            let a = byteLength + 3 & ~3;
+            return a
+        }
+
+
+        function decodeText( array ) {
+
+            if ( typeof TextDecoder !== 'undefined' ) {
+
+                return new TextDecoder().decode( array );
+
+            }
+
+            // Avoid the String.fromCharCode.apply(null, array) shortcut, which
+            // throws a "maximum call stack size exceeded" error for large arrays.
+
+            let s = '';
+
+            for ( let i = 0, il = array.length; i < il; i ++ ) {
+
+                // Implicitly assumes little-endian.
+                s += String.fromCharCode( array[ i ] );
+
+            }
+
+            try {
+
+                // merges multi-byte utf-8 characters.
+
+                return decodeURIComponent( escape( s ) );
+
+            } catch ( e ) { // see #16358
+
+                return s;
+
+            }
+
+        }
+
 
         function getMagicString(dataView) {
             var byteOffset = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>windMap</title>
+    <style>
+        body {
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js"></script>
+    <script type="module">
+            // 创建一个16字节长度的缓冲
+        var buffer = new ArrayBuffer(16);
+        // 创建一个视图，此视图把缓冲内的数据格式化为一个32位（4字节）有符号整数数组
+        console.log(buffer)
+        var int32View = new Float32Array(buffer);
+ 
+        // 我们可以像普通数组一样访问该数组中的元素
+        for (var i = 0; i < int32View.length; i++) {
+            int32View[i] = i * 3.05;
+        }
+        console.log(int32View)
+        // // 运行完之后 int32View 为[0,2,4,6]
+        // // 创建另一个视图，此视图把缓冲内的数据格式化为一个16位（2字节）有符号整数数组
+        // var int16View = new Int16Array(buffer);
+
+        // for (var i = 0; i < int16View.length; i++) {
+        // console.log(int16View[i]);
+        // }
+        // // 打印出来的结果依次是0，0，2，0，4，0，6，0
+
+    </script>
+</body>
+
+</html>
