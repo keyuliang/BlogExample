@@ -17,9 +17,21 @@
 		import * as THREE from "../build/three.module.js";
 		import { OrbitControls } from '../examples/jsm/controls/OrbitControls.js';
         import {GUI} from '../examples/jsm/libs/lil-gui.module.min.js'
+        import  Parse from './parse.js'
 
         let scene, camera, renderer, controls;
         let body
+
+        const WEBGL_COMPONENT_TYPES = {
+            5120: Int8Array,
+            5121: Uint8Array,
+            5122: Int16Array,
+            5123: Uint16Array,
+            5125: Uint32Array,
+            5126: Float32Array
+        };
+
+        const BINARY_EXTENSION_HEADER_MAGIC = 'glTF';
 
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 100000)
@@ -37,105 +49,34 @@
 		scene.add( light );
 
 
-        axios.get('./2-frame.glb', {
+        axios.get('./106-frame.glb', {
             responseType: 'arraybuffer', 
         })
         .then(function (response) {
             console.log(response);
             var dataView = new DataView(response.data);
-            let byteOffset = 0;
-            let a = {}
-            a.type = getMagicString(dataView, byteOffset + 0);
-            a.version = dataView.getUint32(byteOffset + 4, true);
-            var byteLength = dataView.getUint32(byteOffset + 8, true);
-            a.header = {
-                byteOffset: byteOffset,
-                byteLength: byteLength
-            };
-            parseGlb(response.data, byteOffset + 12, byteLength)
+            let magic = getMagicString(dataView);
 
-            console.log(a)
+            if(magic === BINARY_EXTENSION_HEADER_MAGIC){
+                new Parse(response.data)
+            }
+
+            // a.version = dataView.getUint32(byteOffset + 4, true);
+            // var byteLength = dataView.getUint32(byteOffset + 8, true);
+            // a.header = {
+            //     byteOffset: byteOffset,
+            //     byteLength: byteLength
+            // };
         })
         .catch(function (error) {
             console.log(error);
         });
 
-        function parseGlb(data, bufferOffset, bufferLength){
-            let dataView = new DataView(data);
-         
-            let chunkoffset = bufferOffset;
-
-            while(chunkoffset < bufferLength ){
-                let chunkLength = dataView.getUint32(chunkoffset, true);
-                chunkoffset += 4
-                let chunkType = dataView.getUint32(chunkoffset, true);
-                chunkoffset += 4
-
-                if(chunkType == 0){
-                    let contentArray = new Uint8Array(data, chunkoffset, chunkLength);
-                    let content = decodeText(contentArray)
-                    let json = JSON.parse(content)
-                    console.log(json)
-                } else{
-                    body = data.slice(chunkoffset,  chunkoffset + chunkLength)
-                    console.log(body)
-                    
-                    let content = new Float32Array(body, 493588, 1480764 / 4);
-                    console.log(content)
-
-                }
-
-                chunkoffset += padTo4Bytes(chunkLength)    
-                console.log(chunkoffset)    
-            }
-           
-        }
-
-        function padTo4Bytes(byteLength) {
-            let a = byteLength + 3 & ~3;
-            return a
-        }
-
-
-        function decodeText( array ) {
-
-            if ( typeof TextDecoder !== 'undefined' ) {
-
-                return new TextDecoder().decode( array );
-
-            }
-
-            // Avoid the String.fromCharCode.apply(null, array) shortcut, which
-            // throws a "maximum call stack size exceeded" error for large arrays.
-
-            let s = '';
-
-            for ( let i = 0, il = array.length; i < il; i ++ ) {
-
-                // Implicitly assumes little-endian.
-                s += String.fromCharCode( array[ i ] );
-
-            }
-
-            try {
-
-                // merges multi-byte utf-8 characters.
-
-                return decodeURIComponent( escape( s ) );
-
-            } catch ( e ) { // see #16358
-
-                return s;
-
-            }
-
-        }
-
-
         function getMagicString(dataView) {
             var byteOffset = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
             return "".concat(String.fromCharCode(dataView.getUint8(byteOffset + 0))).concat(String.fromCharCode(dataView.getUint8(byteOffset + 1))).concat(String.fromCharCode(dataView.getUint8(byteOffset + 2))).concat(String.fromCharCode(dataView.getUint8(byteOffset + 3)));
         }
+
 
         function animate() {
             renderer.render( scene, camera );
