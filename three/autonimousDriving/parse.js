@@ -12,6 +12,15 @@ const WEBGL_COMPONENT_TYPES = {
     5126: Float32Array
 };
 
+const WEBGL_COMPONENT_MULTIPLE = {
+    5120: 1,
+    5121: 1,
+    5122: 2,
+    5123: 2,
+    5125: 4,
+    5126: 4
+}
+
 
 function getMagicString(dataView) {
     var byteOffset = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
@@ -70,7 +79,8 @@ export default class ParseGlb {
             console.log(chunkoffset)
         }
         
-
+        this._loadCloudPoint();
+        this._loadVideoFrame();
     }
     parse(data, bufferOffset, bufferLength){
         
@@ -81,20 +91,69 @@ export default class ParseGlb {
         let accessors = this.content.accessors[index];
         if(!accessors) return;
         let { bufferView, componentType } = accessors;
-        let dataArray = this._loadBufferView(bufferView, componentType);
+        let option = this._loadBufferView(bufferView);
+        let multiple = WEBGL_COMPONENT_MULTIPLE[componentType];
+        let dataArray = new WEBGL_COMPONENT_TYPES[componentType](option.bufferView, 0, option.byteLength / multiple);
         console.log(dataArray)
+        return dataArray
     }
 
-    _loadBufferView(index, componentType){
+    _loadBufferView(index){
         let bufferViews = this.content.bufferViews[index];
         if(!bufferViews) return;
-
-        let dataArray = new WEBGL_COMPONENT_TYPES[componentType](this.body, bufferViews.byteOffset, bufferViews.byteLength);
-        return dataArray;
+        let { byteLength, byteOffset } = bufferViews;
+        return {
+            bufferView: this.body.slice(byteOffset, byteOffset + byteLength),
+            byteLength: bufferViews.byteLength,
+        }
     }
 
-    loadCloudPoint(){
-        let primitives = this.content.xviz.data.update[0].primitives;
+    _loadCloudPoint(){
+        let primitives = this.content.xviz.data.updates[0].primitives;
+        let cloudPointOption = primitives["/lidar/points"];
+        cloudPointOption.points.forEach(item =>{
+            let colorI = item.colors.slice(12);
+            let pointI = item.points.slice(12);
+            item.colorsBuffer = this._loadAccessor(Number(colorI));
+            item.pointsBuffer = this._loadAccessor(Number(pointI));
+            console.log(item)
+        })
+    }
 
+    _loadVideoFrame(){
+
+        let primitives = this.content.xviz.data.updates[0].primitives;
+
+        for(let key in primitives){
+            if(key.search("camera") != -1){
+                primitives[key].images.forEach(item =>{
+                    let i = item.data.slice(9);
+                    let url = this._loadImage(i);
+                    item.url = url;
+
+                    console.log(item)
+                })
+            }
+        }
+
+       
+    }
+
+    _loadImage(imageIndex){
+        let image = this.content.images[imageIndex];
+        let option = this._loadBufferView(image.bufferView);
+        const blob = new Blob( [ option.bufferView ], {
+            type: image.mimeType
+        } );
+        let sourceURI = URL.createObjectURL( blob );
+        return sourceURI;
+    }
+
+    _parseVideoFrame(arrayBuffer){
+        // let view = new DataView(arrayBuffer);
+        // let result = {}
+        // var offset = 0;
+       
+        return result;
     }
 }
