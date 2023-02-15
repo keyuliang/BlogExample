@@ -20,8 +20,9 @@
         import  Parse from './parse.js'
 
         let scene, camera, renderer, controls;
-        let body
-
+        let body, batchSize = 4, lastFrame = 1;
+        let frameLength = 70;
+        let paserer = [];
         const WEBGL_COMPONENT_TYPES = {
             5120: Int8Array,
             5121: Uint8Array,
@@ -49,28 +50,43 @@
 		scene.add( light );
 
 
-        axios.get('./2-frame.glb', {
-            responseType: 'arraybuffer', 
-        })
-        .then(function (response) {
-            console.log(response);
-            var dataView = new DataView(response.data);
-            let magic = getMagicString(dataView);
+        // axios.get('./2-frame.glb', {
+        //     responseType: 'arraybuffer', 
+        // })
+        // .then(function (response) {
+        //     console.log(response);
+        //     var dataView = new DataView(response.data);
+        //     let magic = getMagicString(dataView);
 
-            if(magic === BINARY_EXTENSION_HEADER_MAGIC){
-                new Parse(response.data)
+        //     if(magic === BINARY_EXTENSION_HEADER_MAGIC){
+        //         new Parse(response.data)
+        //     }
+        // })
+        // .catch(function (error) {
+        //     console.log(error);
+        // });
+
+
+        function loadStart(){
+            for(let i = 1; i <= batchSize && i <= frameLength; i++ ){
+                loadNextFrame();
             }
+        }
 
-            // a.version = dataView.getUint32(byteOffset + 4, true);
-            // var byteLength = dataView.getUint32(byteOffset + 8, true);
-            // a.header = {
-            //     byteOffset: byteOffset,
-            //     byteLength: byteLength
-            // };
-        })
-        .catch(function (error) {
-            console.log(error);
-        });
+        function loadNextFrame(){
+            lastFrame++;
+            let url = './public/'+ lastFrame +  '-frame.glb';
+
+            if(lastFrame > frameLength) return;
+            
+            axios.get(url, {
+                responseType: "arraybuffer"
+            }).then((res) =>{
+                
+                paserer.push(new Parse(res.data));
+                loadNextFrame()
+            })
+        }
 
         function getMagicString(dataView) {
             var byteOffset = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
@@ -83,6 +99,8 @@
             requestAnimationFrame(animate);
         }
         animate()
+
+        loadStart()
     </script>
 </body>
 

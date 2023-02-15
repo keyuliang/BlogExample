@@ -69,14 +69,11 @@ export default class ParseGlb {
             if ( chunkType === BINARY_EXTENSION_CHUNK_TYPES.JSON ) {
                 const contentArray = new Uint8Array( data, BINARY_EXTENSION_HEADER_LENGTH + chunkoffset, chunkLength );
                 this.content = JSON.parse(decodeText( contentArray )) 
-                console.log(this.content)
             } else if ( chunkType === BINARY_EXTENSION_CHUNK_TYPES.BIN ) {
                 const byteOffset = BINARY_EXTENSION_HEADER_LENGTH + chunkoffset;
                 this.body = data.slice( byteOffset, byteOffset + chunkLength );
-                console.log(this.body)
             }
             chunkoffset += padTo4Bytes(chunkLength);
-            console.log(chunkoffset)
         }
         
         this._loadCloudPoint();
@@ -94,7 +91,6 @@ export default class ParseGlb {
         let option = this._loadBufferView(bufferView);
         let multiple = WEBGL_COMPONENT_MULTIPLE[componentType];
         let dataArray = new WEBGL_COMPONENT_TYPES[componentType](option.bufferView, 0, option.byteLength / multiple);
-        console.log(dataArray)
         return dataArray
     }
 
@@ -116,7 +112,6 @@ export default class ParseGlb {
             let pointI = item.points.slice(12);
             item.colorsBuffer = this._loadAccessor(Number(colorI));
             item.pointsBuffer = this._loadAccessor(Number(pointI));
-            console.log(item)
         })
     }
 
@@ -130,13 +125,9 @@ export default class ParseGlb {
                     let i = item.data.slice(9);
                     let url = this._loadImage(i);
                     item.url = url;
-
-                    console.log(item)
                 })
             }
         }
-
-       
     }
 
     _loadImage(imageIndex){
