@@ -68,6 +68,7 @@
 
 
         function loadStart(){
+
             for(let i = 1; i <= batchSize && i <= frameLength; i++ ){
                 loadNextFrame();
             }
@@ -82,7 +83,6 @@
             axios.get(url, {
                 responseType: "arraybuffer"
             }).then((res) =>{
-                
                 paserer.push(new Parse(res.data));
                 loadNextFrame()
             })
