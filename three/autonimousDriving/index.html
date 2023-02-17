@@ -17,12 +17,13 @@
 		import * as THREE from "../build/three.module.js";
 		import { OrbitControls } from '../examples/jsm/controls/OrbitControls.js';
         import {GUI} from '../examples/jsm/libs/lil-gui.module.min.js'
-        import  Parse from './parse.js'
+        // import  Parse from './parse.js'
 
         let scene, camera, renderer, controls;
         let body, batchSize = 4, lastFrame = 1;
         let frameLength = 70;
         let paserer = [];
+        let workers = [];
         const WEBGL_COMPONENT_TYPES = {
             5120: Int8Array,
             5121: Uint8Array,
@@ -83,7 +84,8 @@
             axios.get(url, {
                 responseType: "arraybuffer"
             }).then((res) =>{
-                paserer.push(new Parse(res.data));
+                // paserer.push(new Parse(res.data));
+                openWorker(res.data, lastFrame)
                 loadNextFrame()
             })
         }
@@ -91,6 +93,10 @@
         function getMagicString(dataView) {
             var byteOffset = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
             return "".concat(String.fromCharCode(dataView.getUint8(byteOffset + 0))).concat(String.fromCharCode(dataView.getUint8(byteOffset + 1))).concat(String.fromCharCode(dataView.getUint8(byteOffset + 2))).concat(String.fromCharCode(dataView.getUint8(byteOffset + 3)));
+        }
+
+        function openWorker(data, index){
+           
         }
 
 

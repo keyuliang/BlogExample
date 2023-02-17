@@ -1,3 +1,212 @@
+// import * as THREE from "../build/three.module.js";
+class Vector2 {
+
+	constructor( x = 0, y = 0 ) {
+
+		this.x = x;
+		this.y = y;
+
+	}
+
+	get width() {
+
+		return this.x;
+
+	}
+
+	set width( value ) {
+
+		this.x = value;
+
+	}
+
+	get height() {
+
+		return this.y;
+
+	}
+
+	set height( value ) {
+
+		this.y = value;
+
+	}
+
+	set( x, y ) {
+
+		this.x = x;
+		this.y = y;
+
+		return this;
+
+	}
+
+	setScalar( scalar ) {
+
+		this.x = scalar;
+		this.y = scalar;
+
+		return this;
+
+	}
+
+	clone() {
+
+		return new this.constructor( this.x, this.y );
+
+	}
+
+	copy( v ) {
+
+		this.x = v.x;
+		this.y = v.y;
+
+		return this;
+
+	}
+
+	add( v, w ) {
+
+		if ( w !== undefined ) {
+
+			console.warn( 'Vector2: .add() now only accepts one argument. Use .addVectors( a, b ) instead.' );
+			return this.addVectors( v, w );
+
+		}
+
+		this.x += v.x;
+		this.y += v.y;
+
+		return this;
+
+	}
+
+	addScalar( s ) {
+
+		this.x += s;
+		this.y += s;
+
+		return this;
+
+	}
+
+	addVectors( a, b ) {
+
+		this.x = a.x + b.x;
+		this.y = a.y + b.y;
+
+		return this;
+
+	}
+
+	addScaledVector( v, s ) {
+
+		this.x += v.x * s;
+		this.y += v.y * s;
+
+		return this;
+
+	}
+
+	sub( v, w ) {
+
+		if ( w !== undefined ) {
+
+			console.warn( 'Vector2: .sub() now only accepts one argument. Use .subVectors( a, b ) instead.' );
+			return this.subVectors( v, w );
+
+		}
+
+		this.x -= v.x;
+		this.y -= v.y;
+
+		return this;
+
+	}
+
+	subScalar( s ) {
+
+		this.x -= s;
+		this.y -= s;
+
+		return this;
+
+	}
+
+	subVectors( a, b ) {
+
+		this.x = a.x - b.x;
+		this.y = a.y - b.y;
+
+		return this;
+
+	}
+
+	multiply( v ) {
+
+		this.x *= v.x;
+		this.y *= v.y;
+
+		return this;
+
+	}
+
+	multiplyScalar( scalar ) {
+
+		this.x *= scalar;
+		this.y *= scalar;
+
+		return this;
+
+	}
+
+	dot( v ) {
+
+		return this.x * v.x + this.y * v.y;
+
+	}
+
+	cross( v ) {
+
+		return this.x * v.y - this.y * v.x;
+
+	}
+
+    
+	length() {
+
+		return Math.sqrt( this.x * this.x + this.y * this.y );
+
+	}
+
+    divideScalar( scalar ) {
+
+		return this.multiplyScalar( 1 / scalar );
+
+	}
+
+
+	normalize() {
+
+		return this.divideScalar( this.length() || 1 );
+
+	}
+
+
+
+
+
+
+	*[ Symbol.iterator ]() {
+
+		yield this.x;
+		yield this.y;
+
+	}
+
+}
+
+
 const BINARY_EXTENSION_HEADER_LENGTH = 12;
 const BINARY_EXTENSION_CHUNK_TYPES = {
     JSON: 0,
@@ -44,19 +253,22 @@ function padTo4Bytes(byteLength) {
 }
 
 
-export default class ParseGlb {
-    constructor(data){
+class ParseGlb {
+    constructor(){
+        this.content = null;
+        this.body = null;
+        this.mateData = {}
+    }
+
+    parse(data){
         const headView = new DataView(data, 0, BINARY_EXTENSION_HEADER_LENGTH);
-        this.header = {
+       let header = {
             magic: getMagicString(headView, 0),
             versoin: headView.getUint32(4, true),
             length: headView.getUint32(8, true)
         }
-        this.content = null;
-        this.body = null;
-        this.mateData = {}
 
-        const chunkContentsLength = this.header.length - BINARY_EXTENSION_HEADER_LENGTH;
+        const chunkContentsLength = header.length - BINARY_EXTENSION_HEADER_LENGTH;
 		const chunkView = new DataView( data, BINARY_EXTENSION_HEADER_LENGTH );
 
         let chunkoffset = 0;
@@ -79,9 +291,12 @@ export default class ParseGlb {
         
         this._loadCloudPoint();
         this._loadVideoFrame();
-        console.log(this.content)
-        
+        this._extractData();
+
+        return this.mateData;
     }
+
+
     _loadAccessor(index){
         let accessors = this.content.accessors[index];
         if(!accessors) return;
@@ -164,7 +379,7 @@ export default class ParseGlb {
         let objects = primitives['/tracklets/objects'];
         objects.polygons.forEach(item =>{
             let height = item.base.style.height;
-            let mesh = this._buildExtrudeMeshAndLine(item.vectices, height);
+            let mesh = this._buildExtrudeMeshAndLine(item.vertices, height);
             mesh.classes = item.classes;
             mesh.objectId = item.object_id;
             if(this.mateData.mesh){
@@ -187,16 +402,31 @@ export default class ParseGlb {
             }
         })
 
-        let trajectory = primitives['/tracklets/trajectory'];
-        trajectory.polylines.forEach
+        let trackletsTrajectory = primitives['/tracklets/trajectory'];
+        trackletsTrajectory.polylines.forEach(item =>{
+            let line = this._buildLine(item.vertices, 2);
+            if(this.mateData.trackletsLine){
+                this.mateData.trackletsLine.push(line);
+            }else{
+                this.mateData.trackletsLine = [line];
+            }
+        })
  
-
+        let vehicleTrajectory = primitives['/vehicle/trajectory'];
+        vehicleTrajectory.polylines.forEach(item =>{
+            let line = this._buildLine(item.vertices, 4);
+            if(this.mateData.vehicleLine){
+                this.mateData.vehicleLine.push(line);
+            }else{
+                this.mateData.vehicleLine = [line];
+            }
+        })
 
     }
 
     _buildExtrudeMeshAndLine(path, height){
         let topVectives = path.map(vectex => vectex.map(v => v + height))
-        let vectices = path.concat(topVectives);
+        let vertices = path.concat(topVectives);
         let meshIndices = [], lineIndices = [];
         //bottom
         meshIndices = meshIndices.concat([0,2,1,0,3,2])
@@ -213,7 +443,7 @@ export default class ParseGlb {
 
         lineIndices = [0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7]
         return {
-            vectices: vectices,
+            vertices: vertices,
             meshIndices: meshIndices,
             lineIndices: lineIndices,
         }
@@ -241,30 +471,51 @@ export default class ParseGlb {
     }
 
     _buildLine(path, width){
-        if(path.length < 2) return;
-        let vectices = []
+        if(path.length < 2) return {};
+        let vertices = [],
+            indices = []
         for(let i = 0, len = path.length; i < len; i++){
-            if(i === 0 || i === (len -1)){
-                let x1 = path[i + 1][0] - path[i][0],
-                    y1 = path[i + 1][1] - path[i][1];
-                    x2 = -y1 +  path[i][0],
-                    y2 = x1 +  path[i][1],
-                    x3 = y1 +  path[i][0],
-                    y3 = -x1 +  path[i][1];
-                vectices.push([x2, y2, path[i][2]])
-                vectices.push([x3, y3, path[i][2]])
-            } else if( i === (len -1)){
-                let x1 = path[i][0] - path[i - 1][0],
-                    y1 = path[i][1] - path[i - 1][1];
-                    x2 = -y1 +  path[i][0],
-                    y2 = x1 +  path[i][1],
-                    x3 = y1 +  path[i][0],
-                    y3 = -x1 +  path[i][1];
-                vectices.push([x2, y2, path[i][2]])
-                vectices.push([x3, y3, path[i][2]])
+            let point1, point2, dir, d = width, 
+                temp1 = new Vector2(),
+                temp2 = new Vector2();
+            let prev = path[i - 1]? new Vector2(path[i - 1][0],path[i - 1][1]) : null,
+                cur = new Vector2(path[i][0],path[i][1]),
+                next = path[i + 1]? new Vector2(path[i + 1][0],path[i + 1][1]) : null;
+
+            if(!prev && next){
+                temp1.subVectors(next, cur).normalize();
+                dir = new Vector2(-temp1.y, temp1.x)
+            } else if(!next && prev){
+                temp1.subVectors(cur, prev).normalize();
+                dir = new Vector2(-temp1.y, temp1.x)
+            } else{
+                let v1 = temp1.subVectors(cur, prev).normalize(),
+                    v2 = temp2.subVectors(cur, next).normalize(),
+                    sinA = v1.cross(v2);
+                d = width / sinA;
+                dir  = new Vector2().addVectors(v1.multiplyScalar(d) ,v2.multiplyScalar(d));
             }
+            point1 = new Vector2().copy(dir).add(cur);
+            point2 = new Vector2().copy(dir).multiplyScalar(-1).add(cur);
+
+            vertices.push([point1.x, point1.y, path[i][2]]);
+            vertices.push([point2.x, point2.y, path[i][2]]);
+        } 
+        for(let i = 0, len = path.length; i < len - 2; i+=2){
+            indices.push(i, i + 2, i + 3);
+            indices.push(i, i + 3, i + 1);
+        }
+
+        return {
+            vertices: vertices,
+            indices: indices
         }
     }
+}
 
-    
+
+self.onmessage = function(event){
+    let parser = new ParseGlb();
+    let mateData = parser.parse(event.data)
+    postMessage(mateData); //{message:'Hello world', id:2}
 }
