@@ -17,7 +17,7 @@
 		import * as THREE from "../build/three.module.js";
 		import { OrbitControls } from '../examples/jsm/controls/OrbitControls.js';
         import {GUI} from '../examples/jsm/libs/lil-gui.module.min.js'
-        // import  Parse from './parse.js'
+        import  StreamWorker from './worker.js'
 
         let scene, camera, renderer, controls;
         let body, batchSize = 4, lastFrame = 1;
@@ -68,6 +68,10 @@
         // });
 
 
+        let worker = new StreamWorker((data, index) =>{
+            console.log(data, index)
+        });
+
         function loadStart(){
 
             for(let i = 1; i <= batchSize && i <= frameLength; i++ ){
@@ -85,7 +89,8 @@
                 responseType: "arraybuffer"
             }).then((res) =>{
                 // paserer.push(new Parse(res.data));
-                openWorker(res.data, lastFrame)
+                // openWorker(res.data, lastFrame)
+                worker.work(res.data, lastFrame)
                 loadNextFrame()
             })
         }
@@ -93,10 +98,6 @@
         function getMagicString(dataView) {
             var byteOffset = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
             return "".concat(String.fromCharCode(dataView.getUint8(byteOffset + 0))).concat(String.fromCharCode(dataView.getUint8(byteOffset + 1))).concat(String.fromCharCode(dataView.getUint8(byteOffset + 2))).concat(String.fromCharCode(dataView.getUint8(byteOffset + 3)));
-        }
-
-        function openWorker(data, index){
-           
         }
 
 
