@@ -13,6 +13,39 @@
 
 <body>
     <script src="https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js"></script>
+
+    <script type="x-shader/x-vertex" id="vs">
+        varying float vZ;
+
+		void main(){
+            vec4 mvPosition = modelViewMatrix  * vec4(position, 1.0);
+            gl_PointSize = 12.0;
+            gl_PointSize *= ( 12.0 / - mvPosition.z );
+
+            vZ = position.z;
+			gl_Position = projectionMatrix * mvPosition;
+		}
+	</script>
+    <script type="x-shader/x-frament" id="fs">
+        uniform sampler2D uColorRampTexture;
+        varying float vZ;
+        
+		void main(){
+
+            float v = (vZ + 1.8) / 3.6;
+
+
+            float dist = distance(gl_PointCoord, vec2(0.5,0.5));
+            if(dist < 0.5){
+                gl_FragColor = texture2D(uColorRampTexture, vec2(1.0,v));
+            }else{
+                discard;
+            }
+			
+		}
+	</script>
+
+
     <script type="module">
 		import * as THREE from "../build/three.module.js";
 		import { OrbitControls } from '../examples/jsm/controls/OrbitControls.js';
@@ -38,6 +71,7 @@
         const BINARY_EXTENSION_HEADER_MAGIC = 'glTF';
 
         scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xd3d3d3)
         camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 100000)
         camera.position.z = 30;
         renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -52,13 +86,14 @@
         const light = new THREE.AmbientLight( 0x404040 ); // soft white light
 		scene.add( light );
 
-        const geometry = new THREE.BoxGeometry( 10, 10, 10 );
+        const geometry = new THREE.BoxGeometry( 2, 1, 1 );
         const material = new THREE.MeshBasicMaterial( {color: 0x00ff00} );
         const cube = new THREE.Mesh( geometry, material );
-        // scene.add( cube );
+        scene.add( cube );
 
         let mianGroup  = new THREE.Group();
         mianGroup.applyMatrix4(YZMAT)
+        mianGroup.position.y = 1.0
         scene.add(mianGroup);
         let option = {
             frame: 0,
@@ -75,9 +110,12 @@
         let worker = new StreamWorker((event) =>{
             frame[event.index] = event.data
             console.log(event.data,event.index )
+            if(event.index === 0){
+                loadFrameData(frame[event.index])
+            }
         });
-
         function loadFrameData(data){
+
             loadCloudPoint(data.cloudPoint)
             loadCircles(data.circles)
             loadBoxs(data.mesh)
@@ -89,9 +127,18 @@
              if(!cloudPointMesh){
                 cloudPoint.forEach(item =>{
                     let pointGeometry = new THREE.BufferGeometry();
+                    let texture = new THREE.TextureLoader().load('./public/color.jpg');
                     pointGeometry.setAttribute('position', new THREE.BufferAttribute(item.pointsBuffer, 3));
                     pointGeometry.setAttribute( 'color', new THREE.Float32BufferAttribute(item.colorsBuffer, 4 ));
-                    cloudPointMesh = new THREE.Points(pointGeometry, new THREE.PointsMaterial({size: 0.1, vertexColors: true}));
+                    cloudPointMesh = new THREE.Points(pointGeometry, new THREE.ShaderMaterial({
+                        uniforms:{
+                            uColorRampTexture: {value: texture},
+                        },
+                        vertexShader: document.getElementById("vs").textContent,
+                        fragmentShader: document.getElementById("fs").textContent,
+                    }));
+
+                    // cloudPointMesh = new THREE.Points(pointGeometry,  new THREE.PointsMaterial( { size: 0.1, vertexColors: true }));
                     mianGroup.add(cloudPointMesh);
                 })
             } else {
@@ -136,14 +183,14 @@
                 let BoxGeometry = new THREE.BufferGeometry();
                 BoxGeometry.setAttribute('position', positionAttribute)
                 BoxGeometry.setIndex(item.meshIndices);
-                let boxMaterial = new THREE.MeshBasicMaterial( { color: 0x008C00, transparent: true, opacity: 0.5 } );
+                let boxMaterial = new THREE.MeshBasicMaterial( { color: 0x5384dd, transparent: true, opacity: 0.5 } );
                 let box = new THREE.Mesh( BoxGeometry, boxMaterial );
                 mianGroup.add( box );
 
                 let lineGeometry = new THREE.BufferGeometry();
                 lineGeometry.setAttribute('position', positionAttribute)
                 lineGeometry.setIndex(item.lineIndices);
-                let lineMaterial = new THREE.LineBasicMaterial( { color: 0x008C00 } );
+                let lineMaterial = new THREE.LineBasicMaterial( { color: 0x5384dd } );
                 let line = new THREE.LineSegments( lineGeometry, lineMaterial );
                 mianGroup.add( line );
                 boxs.push({
@@ -166,7 +213,7 @@
                     let pathGeometry = new THREE.BufferGeometry();
                     pathGeometry.setAttribute('position', positionAttribute)
                     pathGeometry.setIndex(item.indices);
-                    let pathMaterial = new THREE.MeshBasicMaterial( { color: 0x008C00 } );
+                    let pathMaterial = new THREE.MeshBasicMaterial( { color: 0xffc043} );
                     let path = new THREE.Mesh( pathGeometry, pathMaterial );
                     mianGroup.add( path );
                     trackletsLine.push(path);
@@ -188,7 +235,7 @@
                 let pathGeometry = new THREE.BufferGeometry();
                 pathGeometry.setAttribute('position', positionAttribute)
                 pathGeometry.setIndex(item.indices);
-                let pathMaterial = new THREE.MeshBasicMaterial( { color: 0x008C00 } );
+                let pathMaterial = new THREE.MeshBasicMaterial( { color: 0x88c1a0 } );
                 let path = new THREE.Mesh( pathGeometry, pathMaterial );
                 mianGroup.add( path );
                 vehicleLine.push(path);
@@ -213,7 +260,7 @@
                 responseType: "arraybuffer"
             }).then((res) =>{
                 worker.work(res.data, index - 2)
-                loadNextFrame()
+                loadNextFrame() 
             })
         }
 

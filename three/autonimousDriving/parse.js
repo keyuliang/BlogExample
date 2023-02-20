@@ -403,8 +403,8 @@ class ParseGlb {
         })
 
         let trackletsTrajectory = primitives['/tracklets/trajectory'];
-        trackletsTrajectory.polylines.forEach((item,index) =>{
-            let line = this._buildLine(item.vertices, 0.1, index);
+        trackletsTrajectory.polylines.forEach(item =>{
+            let line = this._buildLine(item.vertices, 0.1, 0);
             if(this.mateData.trackletsLine){
                 this.mateData.trackletsLine.push(line);
             }else{
@@ -414,7 +414,7 @@ class ParseGlb {
  
         let vehicleTrajectory = primitives['/vehicle/trajectory'];
         vehicleTrajectory.polylines.forEach(item =>{
-            let line = this._buildLine(item.vertices, 0.3);
+            let line = this._buildLine(item.vertices, 0.3, 1.8);
             if(this.mateData.vehicleLine){
                 this.mateData.vehicleLine.push(line);
             }else{
@@ -471,7 +471,7 @@ class ParseGlb {
 		// }
     }
 
-    _buildLine(path, width, index){
+    _buildLine(path, width, height){
         if(path.length < 2) return {};
         let vertices = [],
             indices = []
@@ -494,20 +494,15 @@ class ParseGlb {
                     v2 = temp2.subVectors(cur, next).normalize(),
                     cosA = v1.dot(v2),
                     sinA = v1.cross(v2);
-               
-                // sinA = Math.abs(sinA) < 0.08? 0.08 * a : sinA 
-            
                 d = width / sinA;
-     
                 d = cosA > 0.5? 0.1*d : d 
-                console.log(cosA, index)
                 dir  = new Vector2().addVectors(v1.multiplyScalar(d) ,v2.multiplyScalar(d));
             }
             point1 = new Vector2().copy(dir).add(cur);
             point2 = new Vector2().copy(dir).multiplyScalar(-1).add(cur);
 
-            vertices.push([point1.x, point1.y, path[i][2]]);
-            vertices.push([point2.x, point2.y, path[i][2]]);
+            vertices.push([point1.x, point1.y, path[i][2] - height]);
+            vertices.push([point2.x, point2.y, path[i][2] - height]);
         } 
         for(let i = 0, len = path.length; i <= len - 2; i+=2){
             indices.push(i, i + 3, i + 2);
