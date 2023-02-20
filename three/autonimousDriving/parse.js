@@ -380,8 +380,8 @@ class ParseGlb {
         objects.polygons.forEach(item =>{
             let height = item.base.style.height;
             let mesh = this._buildExtrudeMeshAndLine(item.vertices, height);
-            mesh.classes = item.classes;
-            mesh.objectId = item.object_id;
+            mesh.classes = item.base.classes;
+            mesh.objectId = item.base.object_id;
             if(this.mateData.mesh){
                 this.mateData.mesh.push(mesh);
             }else{
@@ -403,8 +403,8 @@ class ParseGlb {
         })
 
         let trackletsTrajectory = primitives['/tracklets/trajectory'];
-        trackletsTrajectory.polylines.forEach(item =>{
-            let line = this._buildLine(item.vertices, 2);
+        trackletsTrajectory.polylines.forEach((item,index) =>{
+            let line = this._buildLine(item.vertices, 0.1, index);
             if(this.mateData.trackletsLine){
                 this.mateData.trackletsLine.push(line);
             }else{
@@ -414,7 +414,7 @@ class ParseGlb {
  
         let vehicleTrajectory = primitives['/vehicle/trajectory'];
         vehicleTrajectory.polylines.forEach(item =>{
-            let line = this._buildLine(item.vertices, 4);
+            let line = this._buildLine(item.vertices, 0.3);
             if(this.mateData.vehicleLine){
                 this.mateData.vehicleLine.push(line);
             }else{
@@ -425,25 +425,26 @@ class ParseGlb {
     }
 
     _buildExtrudeMeshAndLine(path, height){
-        let topVectives = path.map(vectex => vectex.map(v => v + height))
+        path.pop()
+        let topVectives = path.map(vectex => vectex.map((v, index) => index === 2? v + height : v))
         let vertices = path.concat(topVectives);
         let meshIndices = [], lineIndices = [];
         //bottom
-        meshIndices = meshIndices.concat([0,2,1,0,3,2])
+        meshIndices = meshIndices.concat([0,1,2,0,2,3])
         //top
-        meshIndices = meshIndices.concat([4,5,6,4,6,7])
+        meshIndices = meshIndices.concat([4,6,5,4,7,6])
         //front
-        meshIndices = meshIndices.concat([0,1,5,0,5,4])
+        meshIndices = meshIndices.concat([0,5,1,0,4,5])
         //back
-        meshIndices = meshIndices.concat([2,3,7,2,7,6])
+        meshIndices = meshIndices.concat([2,7,3,2,6,7])
         //left
-        meshIndices = meshIndices.concat([3,0,4,3,4,7])
+        meshIndices = meshIndices.concat([3,4,0,3,7,4])
         //right
         meshIndices = meshIndices.concat([2,1,5,2,5,6])
 
         lineIndices = [0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7]
         return {
-            vertices: vertices,
+            vertices: [].concat.apply([], vertices),
             meshIndices: meshIndices,
             lineIndices: lineIndices,
         }
@@ -470,7 +471,7 @@ class ParseGlb {
 		// }
     }
 
-    _buildLine(path, width){
+    _buildLine(path, width, index){
         if(path.length < 2) return {};
         let vertices = [],
             indices = []
@@ -484,15 +485,22 @@ class ParseGlb {
 
             if(!prev && next){
                 temp1.subVectors(next, cur).normalize();
-                dir = new Vector2(-temp1.y, temp1.x)
+                dir = new Vector2(-temp1.y, temp1.x).multiplyScalar(width)
             } else if(!next && prev){
                 temp1.subVectors(cur, prev).normalize();
-                dir = new Vector2(-temp1.y, temp1.x)
+                dir = new Vector2(-temp1.y, temp1.x).multiplyScalar(width)
             } else{
                 let v1 = temp1.subVectors(cur, prev).normalize(),
                     v2 = temp2.subVectors(cur, next).normalize(),
+                    cosA = v1.dot(v2),
                     sinA = v1.cross(v2);
+               
+                // sinA = Math.abs(sinA) < 0.08? 0.08 * a : sinA 
+            
                 d = width / sinA;
+     
+                d = cosA > 0.5? 0.1*d : d 
+                console.log(cosA, index)
                 dir  = new Vector2().addVectors(v1.multiplyScalar(d) ,v2.multiplyScalar(d));
             }
             point1 = new Vector2().copy(dir).add(cur);
@@ -501,13 +509,13 @@ class ParseGlb {
             vertices.push([point1.x, point1.y, path[i][2]]);
             vertices.push([point2.x, point2.y, path[i][2]]);
         } 
-        for(let i = 0, len = path.length; i < len - 2; i+=2){
-            indices.push(i, i + 2, i + 3);
-            indices.push(i, i + 3, i + 1);
+        for(let i = 0, len = path.length; i <= len - 2; i+=2){
+            indices.push(i, i + 3, i + 2);
+            indices.push(i, i + 1, i + 3);
         }
 
         return {
-            vertices: vertices,
+            vertices:  [].concat.apply([], vertices),
             indices: indices
         }
     }
@@ -516,6 +524,9 @@ class ParseGlb {
 
 self.onmessage = function(event){
     let parser = new ParseGlb();
-    let mateData = parser.parse(event.data)
-    postMessage(mateData); //{message:'Hello world', id:2}
+    let mateData = parser.parse(event.data.data)
+    postMessage({
+        data: mateData,
+        index: event.data.index,
+    }); //{message:'Hello world', id:2}
 }

@@ -11,20 +11,26 @@ export default class StreamWorker{
         if(this.workers.length < this.maxThread){
             let worker = new Worker('./parse.js')
             worker.onmessage = (event) =>{
-                this.workend(event.data, index);
+                this.workend(event.data);
                 if(this.pendingData.length != 0){
-                    let data = this.pendingData.shift();
-                    worker.postMessage(data.data);
+                    let temp = this.pendingData.shift();
+                    worker.postMessage({
+                        data: temp.data,
+                        index: temp.index
+                    });
                 } else{
-                    let index = this.workers.indexOf(worker);
-                    this.workers.splice(index, 1);
+                    let i = this.workers.indexOf(worker);
+                    this.workers.splice(i, 1);
                     worker.terminate()
                 }
             };
 
-            this.workers.push(this.worker);
+            this.workers.push(worker);
 
-            worker.postMessage(data)
+            worker.postMessage({
+                data: data,
+                index: index
+            })
 
         } else{
             this.pendingData.push({
@@ -32,26 +38,5 @@ export default class StreamWorker{
                 index: index,
             })
         }
-    }
-
-    
-
-    workStart(){
-        // if(this.pendingData.length == 0) return;
-        // let len1 = this.pendingData.length,
-        //     len2 = this.workers.length;
-        // for(let i = 0; i < maxThread && i < len1; i++){
-        //     let worker = new Worker('./worker.js');
-        //     this.
-        // }
-
-
-        // let worker = this.workers.shift()
-
-        // worker.postMessage({data: data, index: index});
-    }
-
-    workNext(){
-
     }
 }
