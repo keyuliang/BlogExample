@@ -374,7 +374,10 @@ class ParseGlb {
 
     _extractData(){
         let primitives = this.content.xviz.data.updates[0].primitives;
+        let poses = this.content.xviz.data.updates[0].poses;
+
         this.mateData.label = primitives['/tracklets/label'].texts;
+        this.mateData.pose = poses['/vehicle_pose'];
 
         let objects = primitives['/tracklets/objects'];
         objects.polygons.forEach(item =>{
