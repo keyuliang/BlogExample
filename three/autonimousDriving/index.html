@@ -81,31 +81,46 @@
             // dragRotate: false,
             // scrollZoom: false,
         });
-        map.rotateTo(45,  {duration: 0})
+        // map.rotateTo(270,  {duration: 0})
+        // map.setPitch(20,  {duration: 0})
+
         map.setStyle('mapbox://styles/keyuliang/cledvfdml001w01rxxgiyeiv5');
-
-        const quaternion = new THREE.Quaternion(
-            0,  0,  0.3826834323650898,  0.9238795325112867
-        );
-        let q = new THREE.Euler().setFromQuaternion(quaternion, 'XYZ')
-        console.log(q)
-
        let prevZoom
         map.on('mousedown', () =>{
-            console.log(map.getZoom())
-            console.log(map.getFreeCameraOptions())
+            // console.log(map.getZoom())
+            // console.log(map.getFreeCameraOptions())
+            updateCamera()
         })
 
+        map.on('rotateend', () => {
+            // updateCamera()
+
+        });
+        map.on('pitch', () => {
+            // updateCamera()
+
+        });
               
         map.on('wheel', (e) =>{
 
-            let dZoom = map.getZoom() - prevZoom;
-            let dy =  dZoom / 0.17134238442563243;
-            console.log(dZoom)
-            camera.position.y -= dy
-            console.log(camera.position.y)
-            prevZoom = map.getZoom()
+            // let dZoom = map.getZoom() - prevZoom;
+            // let dy =  dZoom / 0.17134238442563243;
+            // console.log(dZoom)
+            // camera.position.y -= dy
+            // console.log(camera.position.y)
+            // prevZoom = map.getZoom()
         })
+
+        function updateCamera(){
+            // console.log(map.getFreeCameraOptions())
+            const quaternion = new THREE.Quaternion(...map.getFreeCameraOptions().orientation);
+            let q = new THREE.Euler().setFromQuaternion(quaternion, 'XYZ')
+            console.log(q)
+
+            // camera.setRotationFromEuler(q)
+            console.log(camera.rotation)
+        }
+
 
         let scene, camera, renderer, controls;
         let body, batchSize = 4, lastFrame = 1;
@@ -129,17 +144,17 @@
         // scene.background = new THREE.Color(0xd3d3d3)
         camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 100000)
         camera.position.y = 200;
+        camera.rotateX(-Math.PI / 2)
         renderer = new THREE.WebGLRenderer({ antialias: true,alpha: true });
         renderer.setPixelRatio( window.devicePixelRatio );
         renderer.setSize(window.innerWidth, window.innerHeight);
+        // controls = new OrbitControls(camera, renderer.domElement);
+        // controls.target.set(0, 0, 0);
+        // controls.update();
 
         // renderer.setClearColor(new THREE.Color(0x000000, 0))
 
         document.getElementById('renderCanvas').appendChild(renderer.domElement);
-
-        controls = new OrbitControls(camera, renderer.domElement);
-        controls.target.set(0, 0, 0);
-        controls.update();
 
         const light = new THREE.AmbientLight( 0x404040 ); // soft white light
 		scene.add( light );
@@ -175,7 +190,7 @@
         });
         function loadFrameData(data){
             let angle = -data.pose.orientation[2] / Math.PI * 180
-            // map.rotateTo(angle,  {duration: 0})
+            map.rotateTo(angle, {duration: 0})
 
             let flon, flat;
             let nextLon = data.pose.mapOrigin.longitude;
@@ -193,9 +208,9 @@
             const mapCamera = map.getFreeCameraOptions();
             const position = [flon, flat];
             const altitude = data.pose.mapOrigin.altitude;
-            // mapCamera.position = mapboxgl.MercatorCoordinate.fromLngLat(position, altitude);
-            // mapCamera.lookAtPoint([flon, flat]);
-            // map.setFreeCameraOptions(mapCamera);
+            mapCamera.position = mapboxgl.MercatorCoordinate.fromLngLat(position, altitude);
+            mapCamera.lookAtPoint([flon, flat]);
+            map.setFreeCameraOptions(mapCamera);
 
             prevZoom = map.getZoom();
 
